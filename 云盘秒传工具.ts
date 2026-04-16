@@ -1017,19 +1017,55 @@
         _syncFromDomFallback() {
             const rowInputs = Array.from(
                 document.querySelectorAll(
-                    ".ant-table-body .ant-checkbox-input, .ant-table-tbody .ant-checkbox-input, [data-row-key] .ant-checkbox-input",
+                    ".ant-table-body input[type='checkbox'], .ant-table-tbody input[type='checkbox'], [class*='list'] input[type='checkbox'], [class*='table'] input[type='checkbox']",
                 ),
             );
-            if (!rowInputs.length) return;
+            if (!rowInputs.length) {
+                const hasAnyChecked = !!document.querySelector(
+                    ".ant-table-body input[type='checkbox']:checked, .ant-table-tbody input[type='checkbox']:checked, [class*='list'] input[type='checkbox']:checked, [class*='table'] input[type='checkbox']:checked, [role='checkbox'][aria-checked='true']",
+                );
+                if (!hasAnyChecked) {
+                    this.isSelectAll = false;
+                    this.selectedRowKeys = [];
+                    this.unselectedRowKeys = [];
+                }
+                return;
+            }
 
             const checkedKeys = [""];
             checkedKeys.length = 0;
             const uncheckedKeys = [""];
             uncheckedKeys.length = 0;
+            const readRowKey = (input) => {
+                const row =
+                    input.closest("[data-row-key]") ||
+                    input.closest("[data-file-id]") ||
+                    input.closest("[data-fileid]") ||
+                    input.closest("[data-id]") ||
+                    input.closest("[data-key]") ||
+                    input.closest("tr") ||
+                    input.closest("li") ||
+                    input.closest("[class*='row']") ||
+                    input.closest("[class*='item']");
+                if (!row) return "";
+                const attrs = [
+                    "data-row-key",
+                    "data-file-id",
+                    "data-fileid",
+                    "data-id",
+                    "data-key",
+                    "row-key",
+                ];
+                for (const a of attrs) {
+                    const v = String(row.getAttribute(a) || "").trim();
+                    if (v) return v;
+                }
+                return "";
+            };
 
             for (const input of rowInputs) {
-                const row = input.closest("[data-row-key]");
-                const rowKey = row?.getAttribute("data-row-key");
+                if (input.closest("thead")) continue;
+                const rowKey = readRowKey(input);
                 if (!rowKey) continue;
                 if (input.checked) checkedKeys.push(rowKey);
                 else uncheckedKeys.push(rowKey);
@@ -1040,7 +1076,7 @@
                     ".ant-table-header .ant-checkbox-wrapper .ant-checkbox-checked, thead .ant-checkbox-wrapper .ant-checkbox-checked",
                 ) ||
                 !!document.querySelector(
-                    ".ant-table-header .ant-checkbox-input:checked, thead .ant-checkbox-input:checked",
+                    ".ant-table-header .ant-checkbox-input:checked, thead .ant-checkbox-input:checked, .ant-table-header input[type='checkbox']:checked, thead input[type='checkbox']:checked",
                 );
 
             if (headerChecked) {
@@ -1064,7 +1100,7 @@
                 "[class*='file']",
             ];
             const checkedCount = document.querySelectorAll(
-                ".ant-table-body .ant-checkbox-input:checked, .ant-table-tbody .ant-checkbox-input:checked, [class*='list'] .ant-checkbox-input:checked",
+                ".ant-table-body input[type='checkbox']:checked, .ant-table-tbody input[type='checkbox']:checked, [class*='list'] input[type='checkbox']:checked, [class*='table'] input[type='checkbox']:checked, [role='checkbox'][aria-checked='true']",
             ).length;
             for (const s of selectors) {
                 const nodes = document.querySelectorAll(s);
@@ -1104,43 +1140,96 @@
             }
         }
 
+        _pickTextFromRow(row) {
+            if (!row) return "";
+            const candidates = row.querySelectorAll(
+                "[title], [data-title], [data-name], .file-name, .name, a, span, div",
+            );
+            for (const el of candidates) {
+                const t1 = String(el.getAttribute?.("title") || "").trim();
+                if (t1 && t1.length <= 300) return t1;
+                const t2 = String(el.getAttribute?.("data-name") || "").trim();
+                if (t2 && t2.length <= 300) return t2;
+                const t3 = String(el.textContent || "").trim();
+                if (
+                    t3 &&
+                    t3.length <= 300 &&
+                    !/^(\d+(\.\d+)?\s*(kb|mb|gb|tb)|\d{4}-\d{1,2}-\d{1,2})$/i.test(t3)
+                ) {
+                    return t3;
+                }
+            }
+            return "";
+        }
+
+        _getRowKeyFromRow(row) {
+            if (!row) return "";
+            const attrs = [
+                "data-row-key",
+                "data-file-id",
+                "data-fileid",
+                "data-id",
+                "data-key",
+                "row-key",
+                "file-id",
+            ];
+            for (const a of attrs) {
+                const v = String(row.getAttribute?.(a) || "").trim();
+                if (v) return v;
+            }
+            return "";
+        }
+
+        _collectSelectedRows() {
+            const rows = new Set();
+            const collectRow = (node) => {
+                if (!node || !node.closest) return;
+                if (node.closest("thead")) return;
+                const row =
+                    node.closest("[data-row-key]") ||
+                    node.closest("[data-file-id]") ||
+                    node.closest("[data-fileid]") ||
+                    node.closest("[data-id]") ||
+                    node.closest("[data-key]") ||
+                    node.closest("tr") ||
+                    node.closest("li") ||
+                    node.closest("[class*='row']") ||
+                    node.closest("[class*='item']");
+                if (!row || row.closest("thead")) return;
+                rows.add(row);
+            };
+
+            const checked = document.querySelectorAll(
+                ".ant-table-body input[type='checkbox']:checked, .ant-table-tbody input[type='checkbox']:checked, [class*='list'] input[type='checkbox']:checked, [class*='table'] input[type='checkbox']:checked, [role='checkbox'][aria-checked='true']",
+            );
+            for (const el of checked) collectRow(el);
+
+            const selectedRows = document.querySelectorAll(
+                ".ant-table-row-selected, [aria-selected='true'], [class*='row'][class*='selected'], [class*='item'][class*='selected']",
+            );
+            for (const el of selectedRows) collectRow(el);
+
+            return [...rows];
+        }
+
         getSelectedNameHints() {
             const names = new Set();
-            const checked = document.querySelectorAll(
-                ".ant-table-body .ant-checkbox-input:checked, .ant-table-tbody .ant-checkbox-input:checked, [class*='list'] .ant-checkbox-input:checked",
-            );
-            const pickTextFromRow = (row) => {
-                if (!row) return "";
-                const candidates = row.querySelectorAll(
-                    "[title], [data-title], .file-name, .name, a, span, div",
-                );
-                for (const el of candidates) {
-                    const t1 = String(el.getAttribute?.("title") || "").trim();
-                    if (t1 && t1.length <= 300) return t1;
-                    const t2 = String(el.textContent || "").trim();
-                    if (
-                        t2 &&
-                        t2.length <= 300 &&
-                        !/^(\d+(\.\d+)?\s*(kb|mb|gb|tb)|\d{4}-\d{1,2}-\d{1,2})$/i.test(
-                            t2,
-                        )
-                    ) {
-                        return t2;
-                    }
-                }
-                return "";
-            };
-            for (const input of checked) {
-                const row =
-                    input.closest("[data-row-key]") ||
-                    input.closest("tr") ||
-                    input.closest("li") ||
-                    input.closest("[class*='row']") ||
-                    input.closest("[class*='item']");
-                const name = pickTextFromRow(row);
+            const rows = this._collectSelectedRows();
+            for (const row of rows) {
+                const name = this._pickTextFromRow(row);
                 if (name) names.add(name);
             }
             return [...names];
+        }
+
+        getSelectedRowKeyHints() {
+            const keys = new Set();
+            const rows = this._collectSelectedRows();
+            for (const row of rows) {
+                const k = this._getRowKeyFromRow(row);
+                if (k) keys.add(k);
+            }
+            return [...keys];
         }
 
         getSelection() {
@@ -1334,6 +1423,10 @@
 
         async collectFiles() {
             const sel = pan123Selector.getSelection();
+            const selectedRowKeyHints =
+                !sel.isSelectAll && sel.selectedRowKeys.length === 0
+                    ? pan123Selector.getSelectedRowKeyHints()
+                    : [];
             const selectedNameHints =
                 !sel.isSelectAll && sel.selectedRowKeys.length === 0
                     ? pan123Selector.getSelectedNameHints()
@@ -1341,6 +1434,7 @@
             if (
                 !sel.isSelectAll &&
                 sel.selectedRowKeys.length === 0 &&
+                selectedRowKeyHints.length === 0 &&
                 selectedNameHints.length === 0
             ) {
                 throw new Error("请先在 123 云盘勾选要导出的文件或文件夹");
@@ -1371,9 +1465,13 @@
                             !sel.unselectedRowKeys.includes(f.fileId.toString()),
                     );
             } else {
-                if (sel.selectedRowKeys.length > 0) {
+                const selectedKeys =
+                    sel.selectedRowKeys.length > 0
+                        ? sel.selectedRowKeys
+                        : selectedRowKeyHints;
+                if (selectedKeys.length > 0) {
                     const allFileInfo = await pan123Api.getFileInfoBatch(
-                        sel.selectedRowKeys,
+                        selectedKeys,
                     );
                     allFileInfo
                         .filter((info) => info.type !== 1)
