@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         云盘秒传工具（夸克/天翼/123/光鸭）
-// @version      2026.04.15
+// @version      2026.04.16
 // @description  云盘秒传工具（夸克/天翼/123/光鸭）
 // @run-at       document-idle
 // @match        https://pan.quark.cn/*
@@ -34,11 +34,9 @@
 (function () {
     "use strict";
 
-    const SCRIPT_VERSION = "2026.04.20";
+    const SCRIPT_VERSION = "2026.04.16";
     const GUANGYA_API_BASE = "https://api.guangyapan.com";
-    /** get_res_center_token：业务 code 156 表示已秒传命中 */
     const GUANGYA_CODE_RES_TOKEN_INSTANT = 156;
-    /** create_dir：业务 code 159 表示目录已存在（failIfNameExist=true） */
     const GUANGYA_CODE_DIR_EXISTS = 159;
     const GUANGYA_URL_GET_RES_CENTER_TOKEN = `${GUANGYA_API_BASE}/nd.bizuserres.s/v1/get_res_center_token`;
     const GUANGYA_URL_CREATE_DIR = `${GUANGYA_API_BASE}/nd.bizuserres.s/v1/file/create_dir`;
